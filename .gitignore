@@ -1,0 +1,28 @@
+# Node modules
+node_modules/
+
+# Environment variables
+.env
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# IDE folders
+.vscode/
+.idea/
+
+# Build files (if using dist or compiled output)
+dist/
+build/
+
+# Render-specific cache (optional but safe)
+.cache/
+
+# NPM lock file (if using Yarn instead)
+yarn.lock
