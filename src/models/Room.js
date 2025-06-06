@@ -5,6 +5,7 @@ const RoomSchema = new mongoose.Schema({
   content: { type: String, default: "" },
   lastModified: { type: Date, default: Date.now },
   participants: [{ type: String }],
+  readOnlyParticipants: [{ type: String }],
 });
 
 module.exports = mongoose.model("Room", RoomSchema);

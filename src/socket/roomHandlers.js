@@ -1,6 +1,6 @@
 const Room = require("../models/Room");
 
-const handleJoin = async (socket, roomId) => {
+const handleJoin = async (socket, { roomId, readOnly = false }) => {
   try {
     // Join the socket room
     socket.join(roomId);
@@ -8,22 +8,41 @@ const handleJoin = async (socket, roomId) => {
     // Find or create room in MongoDB
     let room = await Room.findOne({ roomId });
     if (!room) {
-      room = await Room.create({ roomId, participants: [socket.id] });
+      room = await Room.create({
+        roomId,
+        participants: readOnly ? [] : [socket.id],
+        readOnlyParticipants: readOnly ? [socket.id] : [],
+      });
     } else {
       // Add participant if not already in the room
-      if (!room.participants.includes(socket.id)) {
-        room.participants.push(socket.id);
-        await room.save();
+      if (readOnly) {
+        if (!room.readOnlyParticipants.includes(socket.id)) {
+          room.readOnlyParticipants.push(socket.id);
+          await room.save();
+        }
+      } else {
+        if (!room.participants.includes(socket.id)) {
+          room.participants.push(socket.id);
+          await room.save();
+        }
       }
     }
+
+    // Store read-only status in socket for later use
+    socket.readOnly = readOnly;
 
     // Send current room data to the new participant
     socket.emit("sync", {
       content: room.content,
       lastModified: room.lastModified,
+      readOnly: readOnly,
     });
 
-    console.log(`Client ${socket.id} joined room ${roomId}`);
+    console.log(
+      `Client ${socket.id} joined room ${roomId} as ${
+        readOnly ? "read-only" : "editor"
+      }`
+    );
   } catch (error) {
     console.error("Error joining room:", error);
     socket.emit("error", "Failed to join room");
@@ -32,6 +51,12 @@ const handleJoin = async (socket, roomId) => {
 
 const handleSync = async (socket, { roomId, content }) => {
   try {
+    // Prevent read-only users from sending updates
+    if (socket.readOnly) {
+      socket.emit("error", "Read-only users cannot modify content");
+      return;
+    }
+
     const room = await Room.findOneAndUpdate(
       { roomId },
       {
@@ -59,11 +84,12 @@ const handleLeave = async (socket, roomId) => {
   try {
     socket.leave(roomId);
 
-    // Remove participant from room
-    await Room.findOneAndUpdate(
-      { roomId },
-      { $pull: { participants: socket.id } }
-    );
+    // Remove participant from room based on their role
+    const update = socket.readOnly
+      ? { $pull: { readOnlyParticipants: socket.id } }
+      : { $pull: { participants: socket.id } };
+
+    await Room.findOneAndUpdate({ roomId }, update);
 
     console.log(`Client ${socket.id} left room ${roomId}`);
   } catch (error) {
@@ -75,8 +101,15 @@ const handleDisconnect = async (socket) => {
   console.log("Client disconnected:", socket.id);
   // Clean up rooms where this socket was a participant
   await Room.updateMany(
-    { participants: socket.id },
-    { $pull: { participants: socket.id } }
+    {
+      $or: [{ participants: socket.id }, { readOnlyParticipants: socket.id }],
+    },
+    {
+      $pull: {
+        participants: socket.id,
+        readOnlyParticipants: socket.id,
+      },
+    }
   );
 };
 
