@@ -1,17 +1,12 @@
 import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus } from '@nestjs/common';
 import { FastifyReply, FastifyRequest } from 'fastify';
 
-interface ReplyLike {
-  status(code: number): { send(body: unknown): void };
-}
-
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
     const req = ctx.getRequest<FastifyRequest>();
-    const res = ctx.getResponse<FastifyReply>();
-    const reply = res as unknown as ReplyLike;
+    const reply = ctx.getResponse<FastifyReply>();
 
     if (exception instanceof HttpException) {
       const status = exception.getStatus();
@@ -19,7 +14,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
       const message = typeof response === 'string' ? response : (response as any).message ?? 'Request failed';
       const details = typeof response === 'object' ? (response as any).details : undefined;
 
-      reply.status(status).send({
+      reply.code(status).send({
         code: `HTTP_${status}`,
         message,
         details,
@@ -29,7 +24,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
       return;
     }
 
-    reply.status(HttpStatus.INTERNAL_SERVER_ERROR).send({
+    reply.code(HttpStatus.INTERNAL_SERVER_ERROR).send({
       code: 'INTERNAL_SERVER_ERROR',
       message: 'Unexpected error',
       requestId: req.requestId,
