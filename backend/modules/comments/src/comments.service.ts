@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '@backend/packages/database/src/prisma.service';
 import { CreateCommentDto } from './dto/create-comment.dto';
 
@@ -13,7 +14,7 @@ export class CommentsService {
         authorId,
         body: dto.body,
         parentId: dto.parentId,
-        anchor: dto.anchor as any
+        anchor: (dto.anchor ?? Prisma.JsonNull) as Prisma.InputJsonValue
       }
     });
   }

@@ -1,5 +1,5 @@
 import { Job, Worker } from 'bullmq';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { RedisOptions } from 'ioredis';
 import * as Y from 'yjs';
 
@@ -53,7 +53,7 @@ export class SnapshotProcessor {
               status: 'COMPLETED',
               workspaceId: job.data.workspaceId,
               idempotencyKey: `snapshot:${job.id}`,
-              payload: job.data as any
+              payload: job.data as unknown as Prisma.InputJsonValue
             },
             update: { status: 'COMPLETED' }
           });

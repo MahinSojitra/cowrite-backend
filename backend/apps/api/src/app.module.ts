@@ -43,6 +43,6 @@ import { RbacGuard } from './common/guards/rbac.guard';
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(workspaceMiddleware).forRoutes('*path');
+    consumer.apply(workspaceMiddleware).forRoutes('*');
   }
 }

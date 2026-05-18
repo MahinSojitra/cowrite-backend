@@ -1,10 +1,10 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { randomUUID } from 'crypto';
+import { StringValue } from 'ms';
 import { getEnv } from '@backend/packages/config/src/env';
 import { PrismaService } from '@backend/packages/database/src/prisma.service';
 import { password } from '@backend/packages/auth/src/password';
-import { JwtPayload } from '@backend/packages/auth/src/jwt-payload';
 
 @Injectable()
 export class AuthService {
@@ -31,17 +31,17 @@ export class AuthService {
       }
     });
 
-    const payload: JwtPayload = { sub: user.id, sessionId: session.id, roles: [] };
+    const payload = { sub: user.id, sessionId: session.id, roles: [] };
     const env = getEnv();
 
-    const accessToken = await this.jwtService.signAsync(payload as unknown as Record<string, unknown>, {
+    const accessToken = await this.jwtService.signAsync(payload, {
       secret: env.JWT_ACCESS_SECRET,
-      expiresIn: env.JWT_ACCESS_TTL as any
+      expiresIn: env.JWT_ACCESS_TTL as StringValue
     });
 
-    const refreshToken = await this.jwtService.signAsync(payload as unknown as Record<string, unknown>, {
+    const refreshToken = await this.jwtService.signAsync(payload, {
       secret: env.JWT_REFRESH_SECRET,
-      expiresIn: env.JWT_REFRESH_TTL as any
+      expiresIn: env.JWT_REFRESH_TTL as StringValue
     });
 
     return { accessToken, refreshToken };
@@ -51,7 +51,7 @@ export class AuthService {
     const env = getEnv();
     return this.jwtService.signAsync(
       { sub: userId, sessionId, workspaceId, documentId },
-      { secret: env.JWT_COLLAB_SECRET, expiresIn: `${env.COLLAB_TOKEN_TTL_SECONDS}s` as any }
+      { secret: env.JWT_COLLAB_SECRET, expiresIn: `${env.COLLAB_TOKEN_TTL_SECONDS}s` as StringValue }
     );
   }
 }
