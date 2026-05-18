@@ -1,0 +1,414 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  EDITOR
+  VIEWER
+}
+
+enum MemberStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+  REMOVED
+}
+
+enum DocumentRole {
+  OWNER
+  EDITOR
+  COMMENTER
+  VIEWER
+}
+
+enum SubjectType {
+  USER
+  MEMBER
+  API_TOKEN
+}
+
+enum PermissionEffect {
+  ALLOW
+  DENY
+}
+
+enum InheritanceMode {
+  INHERIT
+  OVERRIDE
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
+}
+
+enum SessionStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+enum JobStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  DEAD_LETTER
+}
+
+enum NotificationType {
+  INVITATION
+  COMMENT
+  MENTION
+  SYSTEM
+}
+
+enum DocumentState {
+  ACTIVE
+  ARCHIVED
+  DELETED
+}
+
+enum AuditAction {
+  AUTH_LOGIN
+  AUTH_LOGOUT
+  WORKSPACE_CREATE
+  WORKSPACE_MEMBER_INVITE
+  DOCUMENT_CREATE
+  DOCUMENT_UPDATE
+  DOCUMENT_RESTORE
+  PERMISSION_CHANGE
+  TOKEN_CREATED
+  TOKEN_REVOKED
+}
+
+enum CommentStatus {
+  OPEN
+  RESOLVED
+  DELETED
+}
+
+enum OAuthProvider {
+  LOCAL
+  GOOGLE
+  GITHUB
+}
+
+model User {
+  id             String             @id @default(uuid())
+  email          String             @unique
+  name           String
+  avatarUrl      String?
+  passwordHash   String?
+  provider       OAuthProvider      @default(LOCAL)
+  providerUserId String?
+  isActive       Boolean            @default(true)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  deletedAt      DateTime?
+  sessions       Session[]
+  memberships    WorkspaceMember[]
+  ownedWorkspaces Workspace[]       @relation("WorkspaceOwner")
+  createdDocs    Document[]         @relation("DocumentCreator")
+  comments       Comment[]
+  invitations    Invitation[]       @relation("InvitationInviter")
+  notifications  Notification[]
+  auditLogs      AuditLog[]         @relation("AuditActor")
+  apiTokens      ApiToken[]
+  docVersions    DocumentVersion[]  @relation("DocumentVersionAuthor")
+  docUpdates     DocumentUpdate[]   @relation("DocumentUpdateActor")
+
+  @@index([provider, providerUserId])
+  @@index([deletedAt])
+}
+
+model Session {
+  id           String        @id @default(uuid())
+  userId       String
+  tokenFamily  String
+  status       SessionStatus @default(ACTIVE)
+  ipAddress    String?
+  userAgent    String?
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  deletedAt    DateTime?
+  user         User          @relation(fields: [userId], references: [id])
+
+  @@index([userId, status])
+  @@index([expiresAt])
+}
+
+model Workspace {
+  id            String            @id @default(uuid())
+  slug          String            @unique
+  name          String
+  ownerId       String
+  settings      Json?
+  billingTier   String            @default("free")
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  deletedAt     DateTime?
+  owner         User              @relation("WorkspaceOwner", fields: [ownerId], references: [id])
+  members       WorkspaceMember[]
+  documents     Document[]
+  invitations   Invitation[]
+  notifications Notification[]
+  auditLogs     AuditLog[]
+  backgroundJobs BackgroundJob[]
+
+  @@index([ownerId])
+  @@index([deletedAt])
+}
+
+model WorkspaceMember {
+  id          String        @id @default(uuid())
+  workspaceId String
+  userId      String
+  role        WorkspaceRole
+  status      MemberStatus  @default(ACTIVE)
+  joinedAt    DateTime      @default(now())
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  deletedAt   DateTime?
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id])
+  user        User          @relation(fields: [userId], references: [id])
+
+  @@unique([workspaceId, userId])
+  @@index([workspaceId, role])
+  @@index([userId, status])
+}
+
+model Document {
+  id               String              @id @default(uuid())
+  workspaceId      String
+  parentId         String?
+  slug             String?
+  title            String
+  state            DocumentState       @default(ACTIVE)
+  createdById      String
+  currentSnapshotId String?
+  metadata         Json?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  deletedAt        DateTime?
+  workspace        Workspace           @relation(fields: [workspaceId], references: [id])
+  parent           Document?           @relation("DocumentHierarchy", fields: [parentId], references: [id])
+  children         Document[]          @relation("DocumentHierarchy")
+  creator          User                @relation("DocumentCreator", fields: [createdById], references: [id])
+  versions         DocumentVersion[]
+  snapshots        Snapshot[]
+  updates          DocumentUpdate[]
+  comments         Comment[]
+  permissions      DocumentPermission[]
+
+  @@unique([workspaceId, slug])
+  @@index([workspaceId, updatedAt(sort: Desc)])
+  @@index([workspaceId, parentId])
+  @@index([deletedAt])
+}
+
+model DocumentPermission {
+  id            String           @id @default(uuid())
+  documentId    String
+  subjectType   SubjectType
+  subjectId     String
+  role          DocumentRole
+  effect        PermissionEffect @default(ALLOW)
+  inheritance   InheritanceMode  @default(INHERIT)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  deletedAt     DateTime?
+  document      Document         @relation(fields: [documentId], references: [id])
+
+  @@index([documentId, subjectType, subjectId])
+  @@index([deletedAt])
+}
+
+model DocumentVersion {
+  id            String   @id @default(uuid())
+  documentId    String
+  versionNumber Int
+  authorId      String?
+  source        String   @default("snapshot")
+  summary       String?
+  snapshotId    String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  deletedAt     DateTime?
+  document      Document @relation(fields: [documentId], references: [id])
+  author        User?    @relation("DocumentVersionAuthor", fields: [authorId], references: [id])
+
+  @@unique([documentId, versionNumber])
+  @@index([documentId, versionNumber(sort: Desc)])
+}
+
+model Snapshot {
+  id          String   @id @default(uuid())
+  documentId  String
+  sequence    Int
+  snapshotData String
+  stateVector String?
+  updateCount Int      @default(0)
+  byteSize    Int?
+  hash        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+  document    Document @relation(fields: [documentId], references: [id])
+
+  @@index([documentId, sequence(sort: Desc)])
+}
+
+model DocumentUpdate {
+  id           String   @id @default(uuid())
+  documentId   String
+  sequence     Int
+  updateData   String
+  hash         String?
+  prevHash     String?
+  actorId      String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  deletedAt    DateTime?
+  document     Document @relation(fields: [documentId], references: [id])
+  actor        User?    @relation("DocumentUpdateActor", fields: [actorId], references: [id])
+
+  @@unique([documentId, sequence])
+  @@index([documentId, sequence])
+}
+
+model Comment {
+  id           String        @id @default(uuid())
+  documentId   String
+  authorId     String
+  parentId     String?
+  body         String
+  anchor       Json?
+  status       CommentStatus @default(OPEN)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  deletedAt    DateTime?
+  document     Document      @relation(fields: [documentId], references: [id])
+  author       User          @relation(fields: [authorId], references: [id])
+
+  @@index([documentId, createdAt])
+}
+
+model PresenceSession {
+  id           String   @id @default(uuid())
+  workspaceId  String
+  documentId   String
+  userId       String
+  sessionId    String
+  lastSeenAt   DateTime
+  metadata     Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([workspaceId, documentId, lastSeenAt])
+}
+
+model AuditLog {
+  id          String      @id @default(uuid())
+  workspaceId String?
+  actorId     String?
+  action      AuditAction
+  resourceType String
+  resourceId  String?
+  ipAddress   String?
+  userAgent   String?
+  payload     Json?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  deletedAt   DateTime?
+  workspace   Workspace?  @relation(fields: [workspaceId], references: [id])
+  actor       User?       @relation("AuditActor", fields: [actorId], references: [id])
+
+  @@index([workspaceId, createdAt(sort: Desc)])
+  @@index([actorId, createdAt(sort: Desc)])
+}
+
+model ApiToken {
+  id             String   @id @default(uuid())
+  userId         String
+  workspaceId    String?
+  name           String
+  tokenHash      String   @unique
+  scopes         String[]
+  lastUsedAt     DateTime?
+  expiresAt      DateTime?
+  revokedAt      DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
+  user           User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, revokedAt])
+}
+
+model Invitation {
+  id            String           @id @default(uuid())
+  workspaceId   String
+  email         String
+  role          WorkspaceRole
+  status        InvitationStatus @default(PENDING)
+  tokenHash     String           @unique
+  inviterId     String
+  expiresAt     DateTime
+  acceptedAt    DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  deletedAt     DateTime?
+  workspace     Workspace        @relation(fields: [workspaceId], references: [id])
+  inviter       User             @relation("InvitationInviter", fields: [inviterId], references: [id])
+
+  @@index([workspaceId, status])
+  @@index([email, status])
+}
+
+model Notification {
+  id          String           @id @default(uuid())
+  workspaceId String?
+  userId      String
+  type        NotificationType
+  payload     Json
+  readAt      DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  deletedAt   DateTime?
+  workspace   Workspace?       @relation(fields: [workspaceId], references: [id])
+  user        User             @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt(sort: Desc)])
+}
+
+model BackgroundJob {
+  id             String    @id @default(uuid())
+  workspaceId    String?
+  queueName      String
+  jobName        String
+  idempotencyKey String    @unique
+  status         JobStatus @default(QUEUED)
+  attempts       Int       @default(0)
+  lastError      String?
+  payload        Json?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  completedAt    DateTime?
+  deletedAt      DateTime?
+  workspace      Workspace? @relation(fields: [workspaceId], references: [id])
+
+  @@index([queueName, status])
+  @@index([workspaceId, createdAt(sort: Desc)])
+}
