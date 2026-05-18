@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cowrite-worker
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: cowrite-worker
+  template:
+    metadata:
+      labels:
+        app: cowrite-worker
+    spec:
+      containers:
+        - name: worker
+          image: ghcr.io/mahinsojitra/cowrite-worker:latest
+          envFrom:
+            - secretRef:
+                name: cowrite-secrets

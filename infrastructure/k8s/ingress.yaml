@@ -1,0 +1,28 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: cowrite-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: '3600'
+    nginx.ingress.kubernetes.io/proxy-send-timeout: '3600'
+    nginx.ingress.kubernetes.io/affinity: cookie
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: api.cowrite.example.com
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: cowrite-api
+                port:
+                  number: 80
+          - path: /collab
+            pathType: Prefix
+            backend:
+              service:
+                name: cowrite-collab
+                port:
+                  number: 80

@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cowrite-collab
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: cowrite-collab
+  template:
+    metadata:
+      labels:
+        app: cowrite-collab
+    spec:
+      containers:
+        - name: collab
+          image: ghcr.io/mahinsojitra/cowrite-collab:latest
+          ports:
+            - containerPort: 3001
+          envFrom:
+            - secretRef:
+                name: cowrite-secrets
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cowrite-collab
+spec:
+  selector:
+    app: cowrite-collab
+  ports:
+    - port: 80
+      targetPort: 3001
